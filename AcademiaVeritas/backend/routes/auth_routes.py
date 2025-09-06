@@ -1,3 +1,100 @@
+# --- Verifier Registration ---
+@auth_bp.route('/api/verifier/register', methods=['POST'])
+def register_verifier():
+    """
+    Register a new verifier.
+    This endpoint allows verifiers to create new accounts in the system.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        name = data.get('name')
+        email = data.get('email')
+        password = data.get('password')
+        if not name or not email or not password:
+            return jsonify({"error": "Missing required fields. Please provide name, email, and password."}), 400
+        if '@' not in email or '.' not in email:
+            return jsonify({"error": "Invalid email format"}), 400
+        if len(password) < 6:
+            return jsonify({"error": "Password must be at least 6 characters long"}), 400
+        connection = get_db_connection()
+        if not connection:
+            return jsonify({"error": "Database connection failed"}), 500
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT id FROM verifiers WHERE email = %s", (email,))
+            if cursor.fetchone():
+                return jsonify({"error": "Email already registered"}), 409
+            password_hash = hash_password(password)
+            cursor.execute("INSERT INTO verifiers (name, email, password_hash) VALUES (%s, %s, %s)", (name, email, password_hash))
+            connection.commit()
+            return jsonify({"message": "Verifier registered successfully"}), 201
+        except psycopg2.Error as e:
+            connection.rollback()
+            print(f"Database error during verifier registration: {e}")
+            return jsonify({"error": "Database error occurred during registration"}), 500
+        finally:
+            if connection:
+                connection.close()
+    except Exception as e:
+        print(f"Unexpected error during verifier registration: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
+
+# --- Verifier Login ---
+@auth_bp.route('/api/verifier/login', methods=['POST'])
+def login_verifier():
+    """
+    Authenticate a verifier and return a JWT token.
+    This endpoint validates verifier credentials and returns a JWT token for authenticated sessions.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        email = data.get('email')
+        password = data.get('password')
+        if not email or not password:
+            return jsonify({"error": "Missing required fields. Please provide email and password."}), 400
+        if not SECRET_KEY:
+            print("Error: SECRET_KEY environment variable is not set")
+            return jsonify({"error": "Server configuration error"}), 500
+        connection = get_db_connection()
+        if not connection:
+            return jsonify({"error": "Database connection failed"}), 500
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT id, password_hash FROM verifiers WHERE email = %s", (email,))
+            verifier_data = cursor.fetchone()
+            if not verifier_data:
+                return jsonify({"error": "Invalid credentials"}), 401
+            verifier_id, stored_password_hash = verifier_data
+            if not check_password(stored_password_hash, password):
+                return jsonify({"error": "Invalid credentials"}), 401
+            payload = {
+                'verifier_id': verifier_id,
+                'email': email,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24),
+                'iat': datetime.datetime.utcnow()
+            }
+            token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+            return jsonify({
+                "token": token,
+                "message": "Login successful",
+                "verifier_id": verifier_id
+            }), 200
+        except psycopg2.Error as e:
+            print(f"Database error during verifier login: {e}")
+            return jsonify({"error": "Database error occurred during login"}), 500
+        finally:
+            if connection:
+                connection.close()
+    except jwt.InvalidTokenError as e:
+        print(f"JWT error during verifier login: {e}")
+        return jsonify({"error": "Token generation failed"}), 500
+    except Exception as e:
+        print(f"Unexpected error during verifier login: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 """
 Authentication routes module for AcademiaVeritas project.
 

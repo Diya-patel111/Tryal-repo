@@ -50,9 +50,14 @@ export const registerInstitution = (data) => apiClient.post('/institution/regist
 export const loginInstitution = (data) => apiClient.post('/institution/login', data);
 export const addCertificate = (data) => apiClient.post('/certificate/add', data);
 
+export const registerVerifier = (data) => apiClient.post('/verifier/register', data);
+export const loginVerifier = (data) => apiClient.post('/verifier/login', data);
+
 export default {
   verifyCertificate,
   registerInstitution,
   loginInstitution,
   addCertificate,
+  registerVerifier,
+  loginVerifier,
 };

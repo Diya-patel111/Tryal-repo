@@ -27,8 +27,10 @@ const InstitutionPortal = () => {
 
 
 // --- Authentication Forms Component ---
+
 const AuthForms = ({ onLoginSuccess }) => {
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
+  const [userType, setUserType] = useState('institution'); // 'institution' or 'verifier'
   const [formData, setFormData] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -40,20 +42,27 @@ const AuthForms = ({ onLoginSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLoading) return; // Prevent double submission
-    
+    if (isLoading) return;
     setError('');
     setSuccess('');
     setIsLoading(true);
-    
     try {
       if (activeTab === 'register') {
-        await api.registerInstitution(formData);
+        if (userType === 'institution') {
+          await api.registerInstitution(formData);
+        } else {
+          await api.registerVerifier(formData);
+        }
         setSuccess('Registration successful! Please log in.');
-        setActiveTab('login'); // Switch to login tab on success
-        setFormData({}); // Clear form
+        setActiveTab('login');
+        setFormData({});
       } else {
-        const response = await api.loginInstitution(formData);
+        let response;
+        if (userType === 'institution') {
+          response = await api.loginInstitution(formData);
+        } else {
+          response = await api.loginVerifier(formData);
+        }
         onLoginSuccess(response.data.token);
       }
     } catch (err) {
@@ -67,16 +76,37 @@ const AuthForms = ({ onLoginSuccess }) => {
 
   return (
     <div className="bg-white p-4 sm:p-8 rounded-lg shadow-lg max-w-md mx-auto">
-      <div className="flex border-b mb-6">
+      <div className="flex border-b mb-4">
         <button onClick={() => setActiveTab('login')} className={`py-2 px-6 font-semibold ${activeTab === 'login' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Login</button>
         <button onClick={() => setActiveTab('register')} className={`py-2 px-6 font-semibold ${activeTab === 'register' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Register</button>
       </div>
-      <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{activeTab === 'login' ? 'Institution Login' : 'Register Institution'}</h2>
-
+      <div className="flex justify-center mb-6 gap-2">
+        <button
+          type="button"
+          onClick={() => setUserType('institution')}
+          className={`px-4 py-1 rounded-full text-sm font-semibold border ${userType === 'institution' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-300'}`}
+        >
+          Institution
+        </button>
+        <button
+          type="button"
+          onClick={() => setUserType('verifier')}
+          className={`px-4 py-1 rounded-full text-sm font-semibold border ${userType === 'verifier' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-300'}`}
+        >
+          Verifier
+        </button>
+      </div>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
+        {activeTab === 'login'
+          ? (userType === 'institution' ? 'Institution Login' : 'Verifier Login')
+          : (userType === 'institution' ? 'Register Institution' : 'Register Verifier')}
+      </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         {activeTab === 'register' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700">Institution Name</label>
+            <label className="block text-sm font-medium text-gray-700">
+              {userType === 'institution' ? 'Institution Name' : 'Verifier Name'}
+            </label>
             <input type="text" name="name" onChange={handleInputChange} className={inputStyles} required />
           </div>
         )}
@@ -90,12 +120,12 @@ const AuthForms = ({ onLoginSuccess }) => {
         </div>
         {error && <p className="text-red-500 text-sm">{error}</p>}
         {success && <p className="text-green-500 text-sm">{success}</p>}
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={isLoading}
           className={`w-full font-bold py-2 px-4 rounded-lg transition-colors ${
-            isLoading 
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+            isLoading
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
