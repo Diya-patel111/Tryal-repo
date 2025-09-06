@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:14-alpine
+    container_name: academia_db
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=academia_veritas
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d academia_veritas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - academia_network
+
+  # Python Flask Backend
+  backend:
+    container_name: academia_backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://admin:admin@db:5432/academia_veritas
+      - SECRET_KEY=your-secret-key-change-in-production
+      - INFURA_API_KEY=${INFURA_API_KEY}
+      - CONTRACT_ADDRESS=${CONTRACT_ADDRESS}
+      - WALLET_PRIVATE_KEY=${WALLET_PRIVATE_KEY}
+      - WALLET_ADDRESS=${WALLET_ADDRESS}
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - academia_network
+
+  # React Frontend with Nginx
+  frontend:
+    container_name: academia_frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - academia_network
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: academia_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - academia_network
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  academia_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

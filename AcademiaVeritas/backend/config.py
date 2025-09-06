@@ -23,6 +23,9 @@ class Config:
     
     # Blockchain
     INFURA_API_KEY = os.getenv('INFURA_API_KEY', '')
+    CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS', '')
+    WALLET_PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY', '')
+    WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
     
     # File Upload
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size

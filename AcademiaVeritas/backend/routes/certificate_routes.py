@@ -194,10 +194,9 @@ def add_certificate(current_institution_id):
                 }), 409
             
             # Store certificate hash on blockchain
-            from services.blockchain_service import store_certificate_on_blockchain
+            from services.blockchain_service import add_hash
             
-            blockchain_result = store_certificate_on_blockchain(certificate_hash, current_institution_id)
-            blockchain_tx_hash = blockchain_result.get('tx_hash') if blockchain_result.get('success') else None
+            blockchain_tx_hash = add_hash(certificate_hash)
             
             # Insert new certificate into database
             cursor.execute(
@@ -216,7 +215,7 @@ def add_certificate(current_institution_id):
                 "blockchain_tx_hash": blockchain_tx_hash
             }
             
-            if not blockchain_result.get('success'):
+            if not blockchain_tx_hash:
                 response_data["blockchain_warning"] = "Certificate stored in database but blockchain storage failed"
             
             return jsonify(response_data), 201
@@ -295,7 +294,7 @@ def verify_certificate():
             
             # Import OCR service for certificate processing
             from services.ocr_service import parse_details_from_image, validate_extracted_data
-            from services.blockchain_service import verify_certificate_on_blockchain
+            from services.blockchain_service import verify_hash
             from utils.hashing import generate_certificate_hash
             
             # Extract details from the uploaded certificate
@@ -349,7 +348,13 @@ def verify_certificate():
                 certificate_record = cursor.fetchone()
                 
                 if certificate_record:
-                    # Certificate found in database
+                    # Certificate found in database - now perform two-factor verification
+                    certificate_hash = certificate_record[7]  # certificate_hash from database
+                    
+                    # Factor 1: Database verification (already confirmed)
+                    # Factor 2: Blockchain verification
+                    blockchain_verified = verify_hash(certificate_hash)
+                    
                     result_data = {
                         "student_name": certificate_record[2],
                         "roll_number": certificate_record[3],
@@ -361,12 +366,16 @@ def verify_certificate():
                         "blockchain_tx_hash": certificate_record[8]
                     }
                     
-                    # Verify on blockchain if transaction hash exists
-                    if certificate_record[8]:
-                        blockchain_result = verify_certificate_on_blockchain(certificate_record[8])
-                        result_data["blockchain_verified"] = blockchain_result.get('verified', False)
+                    # Determine verification status based on two-factor check
+                    if blockchain_verified:
+                        result_data["status"] = "VERIFIED_ON_CHAIN"
+                        result_data["verification_message"] = "Certificate verified on both database and blockchain"
+                        result_data["blockchain_verified"] = True
                     else:
+                        result_data["status"] = "RECORD_FOUND_BUT_NOT_ON_CHAIN"
+                        result_data["verification_message"] = "Certificate found in database but not verified on blockchain"
                         result_data["blockchain_verified"] = False
+                        result_data["warning"] = "This certificate may not be fully verified. Please contact the issuing institution."
                     
                     return jsonify(result_data), 200
                 else:
